@@ -44,7 +44,7 @@ void main()
 		temp &= 0x00FF;
 		temp |= (sensorBuffer[1] << 8);
 		ftemp = temp * 0.0625;
-		sprintf(display_buffer, "T = %f", ftemp);
+		sprintf(display_buffer, "T = %.2f", ftemp);
 		lcd_cmd(0x01);
 		lcd_cmd(0x80);
 		lcd_chars(display_buffer);

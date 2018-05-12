@@ -1,4 +1,4 @@
-C51 COMPILER V9.57.0.0   MAIN                                                              05/06/2018 21:01:14 PAGE 1   
+C51 COMPILER V9.57.0.0   MAIN                                                              05/12/2018 15:36:27 PAGE 1   
 
 
 C51 COMPILER V9.57.0.0, COMPILATION OF MODULE MAIN
@@ -54,7 +54,7 @@ line level    source
   44   2          temp &= 0x00FF;
   45   2          temp |= (sensorBuffer[1] << 8);
   46   2          ftemp = temp * 0.0625;
-  47   2          sprintf(display_buffer, "T = %f", ftemp);
+  47   2          sprintf(display_buffer, "T = %.2f", ftemp);
   48   2          lcd_cmd(0x01);
   49   2          lcd_cmd(0x80);
   50   2          lcd_chars(display_buffer);
@@ -62,7 +62,7 @@ line level    source
   52   2          delay(10000);
   53   2        }
   54   1      }
-C51 COMPILER V9.57.0.0   MAIN                                                              05/06/2018 21:01:14 PAGE 2   
+C51 COMPILER V9.57.0.0   MAIN                                                              05/12/2018 15:36:27 PAGE 2   
 
   55          
   56          //function implementations
@@ -126,7 +126,7 @@ line level    source
  114   1          writeByte_1W(0xCC); //skip ROM
  115   1          writeByte_1W(0xBE); //read scratchpad
  116   1          sensorBuffer[0]=readByte_1W();
-C51 COMPILER V9.57.0.0   MAIN                                                              05/06/2018 21:01:14 PAGE 3   
+C51 COMPILER V9.57.0.0   MAIN                                                              05/12/2018 15:36:27 PAGE 3   
 
  117   1          sensorBuffer[1]=readByte_1W();
  118   1      }
@@ -190,12 +190,12 @@ line level    source
  176   1        lcd_cmd(0x80); //move cursor to first position
  177   1      }
 
-C51 COMPILER V9.57.0.0   MAIN                                                              05/06/2018 21:01:14 PAGE 4   
+C51 COMPILER V9.57.0.0   MAIN                                                              05/12/2018 15:36:27 PAGE 4   
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
    CODE SIZE        =    401    ----
-   CONSTANT SIZE    =      7    ----
+   CONSTANT SIZE    =      9    ----
    XDATA SIZE       =   ----    ----
    PDATA SIZE       =   ----    ----
    DATA SIZE        =     44    ----
