@@ -2,21 +2,32 @@
 LCD_PORT equ P1
 LCD_E equ P1.3
 LCD_RS equ P1.2
+	
 ; OneWire pin
 PIN_1W equ  P3.3
-; Heater relay
+
+; Heater relay pin
 PIN_RELAY equ P3.7
+	
+; Keyboard pins
+KEY_DEC equ P1.0
+KEY_INC equ P1.1
 
 ; Timer consts for generic 8051 for 1 ms delay
 INIT_TL0 equ 017h
 INIT_TH0 equ 0FCh
+	
+; Display buffer start address
+DISP_BUFFER equ 030h
 
 org 0000h
 	
 sjmp main
 
-text:
-db "LCD OK.", 0
+text1:
+db "T = ", 0
+text2:
+db ".", 0
 	
 main:
 ; I/O pins initialization
@@ -24,6 +35,8 @@ mov LCD_PORT, #0
 clr LCD_E
 clr LCD_RS
 clr PIN_RELAY
+setb KEY_DEC
+setb KEY_INC
 
 ; Timer initialization
 ; Timer0 used for delay
@@ -35,14 +48,32 @@ mov P2, #0
 ; Display initialization
 acall lcd_init
 
-; Display test
-mov dptr, #text
-acall lcd_send_chars
-
 main_loop:
 	acall read_sensor
-	mov P0, r0
-	mov P2, r1
+	acall convert_int_temp
+	acall to_ascii
+	mov r2, 00h
+	
+	acall load_int_disp_buffer
+	
+	mov r0, #DISP_BUFFER
+	mov a, #01h ; clear LCD
+	clr LCD_RS
+	acall lcd_send_byte
+	mov dptr, #text1
+	setb LCD_RS
+	acall lcd_send_chars ; display constant text
+	acall lcd_send_chars_ram ; display dynamic text
+	mov dptr, #text2
+	acall lcd_send_chars ; display constant text
+	mov 00h, r2
+	acall convert_frac_temp
+	acall to_ascii
+
+	acall load_frac_disp_buffer
+
+	mov r0, #DISP_BUFFER
+	acall lcd_send_chars_ram ; display dynamic text
 	mov r0, #255
 	delay:
 		acall delay_1ms
@@ -213,5 +244,119 @@ lcd_send_chars:
 		inc dptr
 		sjmp lcd_send_chars_loop
 	lcd_send_stop:
+	ret
+	
+lcd_send_chars_ram:
+	setb LCD_RS
+	lcd_send_chars_ram_loop:
+		mov a, @r0
+		jz lcd_send_ram_stop
+		acall lcd_send_byte	
+		inc r0
+		sjmp lcd_send_chars_ram_loop
+	lcd_send_ram_stop:
+	ret
+	
+convert_int_temp:
+	mov a, r1
+	anl a, #080h
+	clr PSW^1
+	jnz conv_int_neg_temp
+	sjmp conv_int_pos_temp
+	conv_int_neg_temp:
+	setb PSW^1 ; used to display '-'
+	mov a, r0
+	cpl a
+	clr c
+	inc a
+	mov r0, a
+	mov a, r1
+	cpl a
+	addc a, #0
+	mov r1, a
+	conv_int_pos_temp:
+	mov a, r1
+	mov r2, #4
+	convert_int_temp_loop:
+		clr c
+		rlc a
+		djnz r2, convert_int_temp_loop
+	mov b, a
+	mov a, r0
+	mov r2, #4
+	convert_int_temp_loop2:
+		clr c
+		rrc a
+		djnz r2, convert_int_temp_loop2
+	orl a, b
+	ret
+	
+convert_frac_temp:
+	mov a, r0
+	anl a, #0Fh
+	mov b, #6
+	mul ab
+	ret
+	
+to_ascii:
+	mov b, #10
+	div ab
+	add a, #'0'
+	mov r7, a
+	mov a, b
+	add a, #'0'
+	mov b, a
+	mov a, r7
+	ret
+	
+load_int_disp_buffer:
+	mov r0, #DISP_BUFFER
+	jb PSW^1, disp_minus
+	sjmp skip
+	disp_minus:
+	mov r3, a
+	mov a, #'-'
+	mov @r0, a
+	inc r0
+	mov a, r3
+	skip:
+	mov @r0, a
+	inc r0
+	mov @r0, b
+	inc r0
+	mov @r0, #0
+	ret
+	
+load_frac_disp_buffer:
+	mov r0, #DISP_BUFFER
+	mov @r0, a
+	inc r0
+	mov @r0, b
+	inc r0
+	mov @r0, #0
+	ret
+
+; Debounces buttons and sets a to 1 if KEY_DEC is pressed
+;                                 2 if KEY_INC is pressed
+;                                 3 if both keys are pressed
+get_keys:
+	clr a
+	jnb KEY_DEC, get_key_inc
+	orl a, #1
+	get_key_inc:
+	jnb KEY_INC, get_key_end
+	orl a, #2
+	get_key_end:
+	; wait for buttons to stabilize
+	mov r0, #20
+	get_key_delay:
+		acall delay_1ms
+	djnz r0, get_key_delay
+	jb KEY_DEC, get_key_inc2
+	anl a, #0FEh
+	get_key_inc2:
+	jb KEY_INC, get_key_end2
+	anl a, #0FDh
+	get_key_end2:
 	ret
 end
