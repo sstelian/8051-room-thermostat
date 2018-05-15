@@ -17,18 +17,24 @@ KEY_INC equ P1.1
 INIT_TL0 equ 017h
 INIT_TH0 equ 0FCh
 
-; Display buffer start address
-DISP_BUFFER equ 030h
+; Sensor data buffer start address
+SENSOR_DATA_BUFFER equ 030h
 
 ; Set temperature buffer start address
-SET_TEMP_BUFFER equ 060h
+SET_TEMP_BUFFER equ 032h
+
+; Display buffer start address
+DISP_BUFFER_L1 equ 034h
+DISP_BUFFER_L2 equ 045h
 
 org 0000h
 
 sjmp main
 
 text1:
-db "T = ", 0
+db "T     = ", 0
+text2:
+db "Set T = ", 0
 
 main:
 ; I/O pins initialization
@@ -39,24 +45,35 @@ clr PIN_RELAY
 setb KEY_DEC
 setb KEY_INC
 
+; Set temperature buffer initialization
+mov r0, #SET_TEMP_BUFFER
+mov @r0, #10100010b
+inc r0
+mov @r0, #0
+
 ; Timer initialization
 ; Timer0 used for delay
 orl TMOD, #00010001b
 anl TMOD, #11111101b
 mov P0, #0
-mov P2, #0
 
 ; Display initialization
 acall lcd_init
 
 main_loop:
 	acall read_sensor
+	mov r0, #SENSOR_DATA_BUFFER
+	mov a, r1
+	mov @r0, a
+	mov a, r2
+	inc r0
+	mov @r0, a
 
 	mov a, #01h ; clear LCD
 	clr LCD_RS
 	acall lcd_send_byte
 
-	mov r0, #DISP_BUFFER
+	mov r0, #DISP_BUFFER_L1
 	mov dptr, #text1
 	setb LCD_RS
 	acall lcd_copy_buffer
@@ -70,8 +87,38 @@ main_loop:
 	acall load_frac_disp_buffer
 	mov @r0, #0
 
-	mov r0, #DISP_BUFFER
-	acall lcd_send_chars_ram ; display text from buffer
+	mov r0, #DISP_BUFFER_L1
+	acall lcd_send_chars_ram ; display current temperature
+
+	mov r0, #SET_TEMP_BUFFER
+	mov a, @r0
+	mov r1, a
+	inc r0
+	mov a, @r0
+	mov r2, a
+
+	mov a, #0C0h ; move to line 2
+	clr LCD_RS
+	acall lcd_send_byte
+
+	mov r0, #DISP_BUFFER_L2
+	mov dptr, #text2
+	acall lcd_copy_buffer
+
+	acall convert_int_temp
+	acall to_ascii
+	acall load_int_disp_buffer
+
+	acall convert_frac_temp
+	acall to_ascii
+	acall load_frac_disp_buffer
+
+	mov @r0, #0
+	mov r0, #DISP_BUFFER_L2
+	acall lcd_send_chars_ram ; display set temperature
+
+	acall compare_temp
+	
 	mov r3, #255
 	delay:
 		acall delay_1ms
@@ -366,5 +413,27 @@ get_keys:
 	jb KEY_INC, get_key_end2
 	anl a, #0FDh
 	get_key_end2:
+	ret
+
+; set - current
+compare_temp:
+	; substract lsb
+	mov r0, #SENSOR_DATA_BUFFER
+	mov a, @r0
+	mov b, a
+	mov r0, #SET_TEMP_BUFFER
+	mov a, @r0
+	clr c
+	subb a, b
+	mov r3, a
+	
+	; substract msb
+	mov r0, #SENSOR_DATA_BUFFER+1
+	mov a, @r0
+	mov b, a
+	mov r0, #SET_TEMP_BUFFER+1
+	mov a, @r0
+	subb a, b
+	mov r4, a
 	ret
 end

@@ -1,4 +1,4 @@
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     1
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     1
 
 
 MACRO ASSEMBLER A51 V8.2.7.0
@@ -27,369 +27,444 @@ LOC  OBJ            LINE     SOURCE
   0017                17     INIT_TL0 equ 017h
   00FC                18     INIT_TH0 equ 0FCh
                       19     
-                      20     ; Display buffer start address
-  0030                21     DISP_BUFFER equ 030h
+                      20     ; Sensor data buffer start address
+  0030                21     SENSOR_DATA_BUFFER equ 030h
                       22     
                       23     ; Set temperature buffer start address
-  0060                24     SET_TEMP_BUFFER equ 060h
+  0032                24     SET_TEMP_BUFFER equ 032h
                       25     
-0000                  26     org 0000h
-                      27     
-0000 8005             28     sjmp main
+                      26     ; Display buffer start address
+  0034                27     DISP_BUFFER_L1 equ 034h
+  0045                28     DISP_BUFFER_L2 equ 045h
                       29     
-0002                  30     text1:
-0002 54203D20         31     db "T = ", 0
-0006 00                      
-                      32     
-0007                  33     main:
-                      34     ; I/O pins initialization
-0007 759000           35     mov LCD_PORT, #0
-000A C293             36     clr LCD_E
-000C C292             37     clr LCD_RS
-000E C2B7             38     clr PIN_RELAY
-0010 D290             39     setb KEY_DEC
-0012 D291             40     setb KEY_INC
-                      41     
-                      42     ; Timer initialization
-                      43     ; Timer0 used for delay
-0014 438911           44     orl TMOD, #00010001b
-0017 5389FD           45     anl TMOD, #11111101b
-001A 758000           46     mov P0, #0
-001D 75A000           47     mov P2, #0
-                      48     
-                      49     ; Display initialization
-0020 3109             50     acall lcd_init
-                      51     
-0022                  52     main_loop:
-0022 11AF             53             acall read_sensor
-                      54     
-0024 7401             55             mov a, #01h ; clear LCD
-0026 C292             56             clr LCD_RS
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     2
+0000                  30     org 0000h
+                      31     
+0000 8012             32     sjmp main
+                      33     
+0002                  34     text1:
+0002 54202020         35     db "T     = ", 0
+0006 20203D20                
+000A 00                      
+000B                  36     text2:
+000B 53657420         37     db "Set T = ", 0
+000F 54203D20                
+0013 00                      
+                      38     
+0014                  39     main:
+                      40     ; I/O pins initialization
+0014 759000           41     mov LCD_PORT, #0
+0017 C293             42     clr LCD_E
+0019 C292             43     clr LCD_RS
+001B C2B7             44     clr PIN_RELAY
+001D D290             45     setb KEY_DEC
+001F D291             46     setb KEY_INC
+                      47     
+                      48     ; Set temperature buffer initialization
+0021 7832             49     mov r0, #SET_TEMP_BUFFER
+0023 76A2             50     mov @r0, #10100010b
+0025 08               51     inc r0
+0026 7600             52     mov @r0, #0
+                      53     
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     2
 
-0028 11CA             57             acall lcd_send_byte
-                      58     
-002A 7830             59             mov r0, #DISP_BUFFER
-002C 900002           60             mov dptr, #text1
-002F D292             61             setb LCD_RS
-0031 3120             62             acall lcd_copy_buffer
-                      63     
-0033 3135             64             acall convert_int_temp
-0035 3165             65             acall to_ascii
-0037 3174             66             acall load_int_disp_buffer
-                      67     
-0039 315D             68             acall convert_frac_temp
-003B 3165             69             acall to_ascii
-003D 3185             70             acall load_frac_disp_buffer
-003F 7600             71             mov @r0, #0
-                      72     
-0041 7830             73             mov r0, #DISP_BUFFER
-0043 312A             74             acall lcd_send_chars_ram ; display text from buffer
-0045 7BFF             75             mov r3, #255
-0047                  76             delay:
-0047 114D             77                     acall delay_1ms
-0049 DBFC             78                     djnz r3, delay
-004B 80D5             79             sjmp main_loop
+                      54     ; Timer initialization
+                      55     ; Timer0 used for delay
+0028 438911           56     orl TMOD, #00010001b
+002B 5389FD           57     anl TMOD, #11111101b
+002E 758000           58     mov P0, #0
+                      59     
+                      60     ; Display initialization
+0031 3149             61     acall lcd_init
+                      62     
+0033                  63     main_loop:
+0033 11EF             64             acall read_sensor
+0035 7830             65             mov r0, #SENSOR_DATA_BUFFER
+0037 E9               66             mov a, r1
+0038 F6               67             mov @r0, a
+0039 EA               68             mov a, r2
+003A 08               69             inc r0
+003B F6               70             mov @r0, a
+                      71     
+003C 7401             72             mov a, #01h ; clear LCD
+003E C292             73             clr LCD_RS
+0040 310A             74             acall lcd_send_byte
+                      75     
+0042 7834             76             mov r0, #DISP_BUFFER_L1
+0044 900002           77             mov dptr, #text1
+0047 D292             78             setb LCD_RS
+0049 3160             79             acall lcd_copy_buffer
                       80     
-004D                  81     delay_1ms:
-                      82             ; load initial timer values
-004D 758A17           83             mov TL0, #INIT_TL0
-0050 758CFC           84             mov TH0, #INIT_TH0
-                      85             ; enable timer
-0053 D28C             86             setb TR0
-                      87             ; wait for overflow
-0055                  88             wait:
-0055 308DFD           89                     jnb TF0, wait
-                      90             ; disable timer
-0058 C28C             91             clr TR0
-                      92             ; clear overflow flag
-005A C28D             93             clr TF0
-005C 22               94             ret
-                      95     
-005D                  96     simple_delay:
-005D DFFE             97             djnz r7, simple_delay
-005F 22               98             ret
+004B 3175             81             acall convert_int_temp
+004D 31A5             82             acall to_ascii
+004F 31B4             83             acall load_int_disp_buffer
+                      84     
+0051 319D             85             acall convert_frac_temp
+0053 31A5             86             acall to_ascii
+0055 31C5             87             acall load_frac_disp_buffer
+0057 7600             88             mov @r0, #0
+                      89     
+0059 7834             90             mov r0, #DISP_BUFFER_L1
+005B 316A             91             acall lcd_send_chars_ram ; display current temperature
+                      92     
+005D 7832             93             mov r0, #SET_TEMP_BUFFER
+005F E6               94             mov a, @r0
+0060 F9               95             mov r1, a
+0061 08               96             inc r0
+0062 E6               97             mov a, @r0
+0063 FA               98             mov r2, a
                       99     
-                     100     ; TODO : hardware and software for strong 1W pullup
-0060                 101     init_1W:
-0060 D2B3            102             setb PIN_1W
-0062 7F30            103             mov r7, #48
-0064 115D            104             acall simple_delay
-                     105     
-0066 C2B3            106             clr PIN_1W
+0064 74C0            100             mov a, #0C0h ; move to line 2
+0066 C292            101             clr LCD_RS
+0068 310A            102             acall lcd_send_byte
+                     103     
+006A 7845            104             mov r0, #DISP_BUFFER_L2
+006C 90000B          105             mov dptr, #text2
+006F 3160            106             acall lcd_copy_buffer
                      107     
-0068 7FB4            108             mov r7, #180
-006A 115D            109             acall simple_delay
-006C 7FB4            110             mov r7, #180
-006E 115D            111             acall simple_delay
-                     112     
-0070 D2B3            113             setb PIN_1W
-                     114     
-0072 7F54            115             mov r7, #84
-0074 115D            116             acall simple_delay
-                     117     
-0076 30B300          118             jnb PIN_1W, init_error
-0079                 119             init_error:
-0079 430601          120                     orl 06h, #1
-007C 8003            121                     jmp init_end
-007E 5306FE          122             anl 06h, #0FEh
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     3
+0071 3175            108             acall convert_int_temp
+0073 31A5            109             acall to_ascii
+0075 31B4            110             acall load_int_disp_buffer
+                     111     
+0077 319D            112             acall convert_frac_temp
+0079 31A5            113             acall to_ascii
+007B 31C5            114             acall load_frac_disp_buffer
+                     115     
+007D 7600            116             mov @r0, #0
+007F 7845            117             mov r0, #DISP_BUFFER_L2
+0081 316A            118             acall lcd_send_chars_ram ; display set temperature
+                     119     
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     3
 
-0081                 123             init_end:
-0081 7F14            124             mov r7, #20
-0083 115D            125             acall simple_delay
-0085 22              126             ret
+0083 31EA            120             acall compare_temp
+                     121             
+0085 7BFF            122             mov r3, #255
+0087                 123             delay:
+0087 118D            124                     acall delay_1ms
+0089 DBFC            125                     djnz r3, delay
+008B 80A6            126             sjmp main_loop
                      127     
-                     128     ; result in accumulator
-0086                 129     read_byte_1W:
-0086 7E08            130             mov r6, #8
-0088 E4              131             clr a
-0089                 132             start_read:
-0089 C2B3            133                     clr PIN_1W
-008B C3              134                     clr C
-008C 13              135                     rrc a
-008D D2B3            136                     setb PIN_1W
-008F 30B302          137                     jnb PIN_1W, read_end
-0092 4480            138                     orl a, #080h
-0094                 139                     read_end:
-0094 7F1E            140                             mov r7, #30
-0096 115D            141                             acall simple_delay
-0098 DEEF            142                     djnz r6, start_read
-009A 22              143             ret
-                     144     
-                     145     ; write byte from accumulator
-009B                 146     write_byte_1W:
-009B 7E08            147             mov r6, #8
-009D                 148             start_write:
-009D C2B3            149                     clr PIN_1W
-009F 13              150                     rrc a
-00A0 92B3            151                     mov PIN_1W, C
-00A2 7F2D            152                     mov r7, #45
-00A4 115D            153                     acall simple_delay
-00A6 D2B3            154                     setb PIN_1W
-00A8 DEF3            155                     djnz r6, start_write
-00AA 7F1E            156             mov r7, #30
-00AC 115D            157             acall simple_delay
-00AE 22              158             ret
+008D                 128     delay_1ms:
+                     129             ; load initial timer values
+008D 758A17          130             mov TL0, #INIT_TL0
+0090 758CFC          131             mov TH0, #INIT_TH0
+                     132             ; enable timer
+0093 D28C            133             setb TR0
+                     134             ; wait for overflow
+0095                 135             wait:
+0095 308DFD          136                     jnb TF0, wait
+                     137             ; disable timer
+0098 C28C            138             clr TR0
+                     139             ; clear overflow flag
+009A C28D            140             clr TF0
+009C 22              141             ret
+                     142     
+009D                 143     simple_delay:
+009D DFFE            144             djnz r7, simple_delay
+009F 22              145             ret
+                     146     
+                     147     ; TODO : hardware and software for strong 1W pullup
+00A0                 148     init_1W:
+00A0 D2B3            149             setb PIN_1W
+00A2 7F30            150             mov r7, #48
+00A4 119D            151             acall simple_delay
+                     152     
+00A6 C2B3            153             clr PIN_1W
+                     154     
+00A8 7FB4            155             mov r7, #180
+00AA 119D            156             acall simple_delay
+00AC 7FB4            157             mov r7, #180
+00AE 119D            158             acall simple_delay
                      159     
-                     160     ; read temperature from DS18B20 sensor
-00AF                 161     read_sensor:
-00AF 1160            162             acall init_1W
-                     163             ; TODO : handle error
-00B1 74CC            164             mov a, #0CCh ; skip ROM
-00B3 119B            165             acall write_byte_1W
-00B5 7444            166             mov a, #044h ; convert T
-00B7 119B            167             acall write_byte_1W
-00B9 1160            168             acall init_1W
-00BB 74CC            169             mov a, #0CCh ; skip ROM
-00BD 119B            170             acall write_byte_1W
-00BF 74BE            171             mov a, #0BEh ; read Scratchpad
-00C1 119B            172             acall write_byte_1W
-00C3 1186            173             acall read_byte_1W
-00C5 F9              174             mov r1, a
-00C6 1186            175             acall read_byte_1W
-00C8 FA              176             mov r2, a
-00C9 22              177             ret
-                     178     
-00CA                 179     lcd_send_byte:
-00CA 53900F          180             anl LCD_PORT, #0Fh
-00CD FF              181             mov r7, a
-00CE 54F0            182             anl a, #0F0h
-00D0 8590F0          183             mov b, LCD_PORT
-00D3 53F00F          184             anl b, #0Fh
-00D6 45F0            185             orl a, b
-00D8 F590            186             mov LCD_PORT, a
-00DA EF              187             mov a, r7
-00DB D293            188             setb LCD_E
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     4
+00B0 D2B3            160             setb PIN_1W
+                     161     
+00B2 7F54            162             mov r7, #84
+00B4 119D            163             acall simple_delay
+                     164     
+00B6 30B300          165             jnb PIN_1W, init_error
+00B9                 166             init_error:
+00B9 430601          167                     orl 06h, #1
+00BC 8003            168                     jmp init_end
+00BE 5306FE          169             anl 06h, #0FEh
+00C1                 170             init_end:
+00C1 7F14            171             mov r7, #20
+00C3 119D            172             acall simple_delay
+00C5 22              173             ret
+                     174     
+                     175     ; result in accumulator
+00C6                 176     read_byte_1W:
+00C6 7E08            177             mov r6, #8
+00C8 E4              178             clr a
+00C9                 179             start_read:
+00C9 C2B3            180                     clr PIN_1W
+00CB C3              181                     clr C
+00CC 13              182                     rrc a
+00CD D2B3            183                     setb PIN_1W
+00CF 30B302          184                     jnb PIN_1W, read_end
+00D2 4480            185                     orl a, #080h
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     4
 
-                     189     
-00DD 114D            190             acall delay_1ms
+00D4                 186                     read_end:
+00D4 7F1E            187                             mov r7, #30
+00D6 119D            188                             acall simple_delay
+00D8 DEEF            189                     djnz r6, start_read
+00DA 22              190             ret
                      191     
-00DF C293            192             clr LCD_E
-                     193     
-00E1 7F28            194             mov r7, #40
-00E3                 195             lcd_cmd_wait:
-00E3 114D            196                     acall delay_1ms
-00E5 DFFC            197                     djnz r7, lcd_cmd_wait
-                     198     
-00E7 53900F          199             anl LCD_PORT, #0Fh
-00EA 7F04            200             mov r7, #4
-00EC                 201             lcd_shift:
-00EC C3              202                     clr c
-00ED 33              203                     rlc a
-00EE DFFC            204                     djnz r7, lcd_shift
-00F0 54F0            205             anl a, #0F0h
-00F2 8590F0          206             mov b, LCD_PORT
-00F5 53F00F          207             anl b, #0Fh
-00F8 45F0            208             orl a, b
-00FA F590            209             mov LCD_PORT, a
-00FC D293            210             setb LCD_E
-                     211     
-00FE 114D            212             acall delay_1ms
-                     213     
-0100 C293            214             clr LCD_E
-0102 7F28            215             mov r7, #40
-0104                 216             lcd_cmd_wait2:
-0104 114D            217                     acall delay_1ms
-0106 DFFC            218                     djnz r7, lcd_cmd_wait2
-0108 22              219             ret
-                     220     
-0109                 221     lcd_init:
-0109 C292            222             clr LCD_RS
-010B 7402            223             mov a, #02h ; 4 bit mode
-010D 11CA            224             acall lcd_send_byte
-010F 7428            225             mov a, #028h ; 5x7 chars
-0111 11CA            226             acall lcd_send_byte
-0113 740E            227             mov a, #0Eh ; cursor on
-0115 11CA            228             acall lcd_send_byte
-0117 7401            229             mov a, #01h ; clear
-0119 11CA            230             acall lcd_send_byte
-011B 7480            231             mov a, #080h ; move cursor to first position
-011D 11CA            232             acall lcd_send_byte
-011F 22              233             ret
-                     234     
-                     235     ; copies data from code memory pointed by dptr to RAM pointed by r0
-                     236     ; stops at null terminator
-0120                 237     lcd_copy_buffer:
-0120                 238             lcd_copy_loop:
-0120 E4              239                     clr a
-0121 93              240                     movc a, @a+dptr
-0122 6005            241                     jz lcd_copy_stop
-0124 F6              242                     mov @r0, a
-0125 08              243                     inc r0
-0126 A3              244                     inc dptr
-0127 80F7            245                     sjmp lcd_copy_loop
-0129                 246             lcd_copy_stop:
-0129 22              247             ret
-                     248     
-                     249     ; prints data pointed by r0 on LCD
-                     250     ; stops at null terminator
-012A                 251     lcd_send_chars_ram:
-012A D292            252             setb LCD_RS
-012C                 253             lcd_send_chars_ram_loop:
-012C E6              254                     mov a, @r0
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     5
+                     192     ; write byte from accumulator
+00DB                 193     write_byte_1W:
+00DB 7E08            194             mov r6, #8
+00DD                 195             start_write:
+00DD C2B3            196                     clr PIN_1W
+00DF 13              197                     rrc a
+00E0 92B3            198                     mov PIN_1W, C
+00E2 7F2D            199                     mov r7, #45
+00E4 119D            200                     acall simple_delay
+00E6 D2B3            201                     setb PIN_1W
+00E8 DEF3            202                     djnz r6, start_write
+00EA 7F1E            203             mov r7, #30
+00EC 119D            204             acall simple_delay
+00EE 22              205             ret
+                     206     
+                     207     ; read temperature from DS18B20 sensor
+00EF                 208     read_sensor:
+00EF 11A0            209             acall init_1W
+                     210             ; TODO : handle error
+00F1 74CC            211             mov a, #0CCh ; skip ROM
+00F3 11DB            212             acall write_byte_1W
+00F5 7444            213             mov a, #044h ; convert T
+00F7 11DB            214             acall write_byte_1W
+00F9 11A0            215             acall init_1W
+00FB 74CC            216             mov a, #0CCh ; skip ROM
+00FD 11DB            217             acall write_byte_1W
+00FF 74BE            218             mov a, #0BEh ; read Scratchpad
+0101 11DB            219             acall write_byte_1W
+0103 11C6            220             acall read_byte_1W
+0105 F9              221             mov r1, a
+0106 11C6            222             acall read_byte_1W
+0108 FA              223             mov r2, a
+0109 22              224             ret
+                     225     
+010A                 226     lcd_send_byte:
+010A 53900F          227             anl LCD_PORT, #0Fh
+010D FF              228             mov r7, a
+010E 54F0            229             anl a, #0F0h
+0110 8590F0          230             mov b, LCD_PORT
+0113 53F00F          231             anl b, #0Fh
+0116 45F0            232             orl a, b
+0118 F590            233             mov LCD_PORT, a
+011A EF              234             mov a, r7
+011B D293            235             setb LCD_E
+                     236     
+011D 118D            237             acall delay_1ms
+                     238     
+011F C293            239             clr LCD_E
+                     240     
+0121 7F28            241             mov r7, #40
+0123                 242             lcd_cmd_wait:
+0123 118D            243                     acall delay_1ms
+0125 DFFC            244                     djnz r7, lcd_cmd_wait
+                     245     
+0127 53900F          246             anl LCD_PORT, #0Fh
+012A 7F04            247             mov r7, #4
+012C                 248             lcd_shift:
+012C C3              249                     clr c
+012D 33              250                     rlc a
+012E DFFC            251                     djnz r7, lcd_shift
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     5
 
-012D 6005            255                     jz lcd_send_ram_stop
-012F 11CA            256                     acall lcd_send_byte
-0131 08              257                     inc r0
-0132 80F8            258                     sjmp lcd_send_chars_ram_loop
-0134                 259             lcd_send_ram_stop:
-0134 22              260             ret
-                     261     
-                     262     ; raw sensor data from r0 and r1 is converted to absolute value
-                     263     ; of temperature (integer part only) stored in a
-                     264     ; if temperature is negative, PSW^1 is set
-0135                 265     convert_int_temp:
-0135 EA              266             mov a, r2
-0136 5480            267             anl a, #080h
-0138 C2D1            268             clr PSW^1
-013A 7002            269             jnz conv_int_neg_temp
-013C 800C            270             sjmp conv_int_pos_temp
-013E                 271             conv_int_neg_temp:
-013E D2D1            272             setb PSW^1 ; used to display '-'
-0140 E9              273             mov a, r1
-0141 F4              274             cpl a
-0142 C3              275             clr c
-0143 04              276             inc a
-0144 F9              277             mov r1, a
-0145 EA              278             mov a, r2
-0146 F4              279             cpl a
-0147 3400            280             addc a, #0
-0149 FA              281             mov r2, a
-014A                 282             conv_int_pos_temp:
-014A EA              283             mov a, r2
-014B 7B04            284             mov r3, #4
-014D                 285             convert_int_temp_loop:
-014D C3              286                     clr c
-014E 33              287                     rlc a
-014F DBFC            288                     djnz r3, convert_int_temp_loop
-0151 F5F0            289             mov b, a
-0153 E9              290             mov a, r1
-0154 7B04            291             mov r3, #4
-0156                 292             convert_int_temp_loop2:
-0156 C3              293                     clr c
-0157 13              294                     rrc a
-0158 DBFC            295                     djnz r3, convert_int_temp_loop2
-015A 45F0            296             orl a, b
-015C 22              297             ret
-                     298     
-                     299     ; raw sensor data from r0 is converted to fractional part of temperature
-                     300     ; with two decimal digits stored in a
-015D                 301     convert_frac_temp:
-015D E9              302             mov a, r1
-015E 540F            303             anl a, #0Fh
-0160 75F006          304             mov b, #6
-0163 A4              305             mul ab
-0164 22              306             ret
-                     307     
-                     308     ; values in a and b are converted to ascii by adding '0'
-0165                 309     to_ascii:
-0165 75F00A          310             mov b, #10
-0168 84              311             div ab
-0169 2430            312             add a, #'0'
-016B FF              313             mov r7, a
-016C E5F0            314             mov a, b
-016E 2430            315             add a, #'0'
-0170 F5F0            316             mov b, a
-0172 EF              317             mov a, r7
-0173 22              318             ret
-                     319     
-                     320     ; stores integer temperature part in display buffer
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     6
+0130 54F0            252             anl a, #0F0h
+0132 8590F0          253             mov b, LCD_PORT
+0135 53F00F          254             anl b, #0Fh
+0138 45F0            255             orl a, b
+013A F590            256             mov LCD_PORT, a
+013C D293            257             setb LCD_E
+                     258     
+013E 118D            259             acall delay_1ms
+                     260     
+0140 C293            261             clr LCD_E
+0142 7F28            262             mov r7, #40
+0144                 263             lcd_cmd_wait2:
+0144 118D            264                     acall delay_1ms
+0146 DFFC            265                     djnz r7, lcd_cmd_wait2
+0148 22              266             ret
+                     267     
+0149                 268     lcd_init:
+0149 C292            269             clr LCD_RS
+014B 7402            270             mov a, #02h ; 4 bit mode
+014D 310A            271             acall lcd_send_byte
+014F 7428            272             mov a, #028h ; 5x7 chars
+0151 310A            273             acall lcd_send_byte
+0153 740E            274             mov a, #0Eh ; cursor on
+0155 310A            275             acall lcd_send_byte
+0157 7401            276             mov a, #01h ; clear
+0159 310A            277             acall lcd_send_byte
+015B 7480            278             mov a, #080h ; move cursor to first position
+015D 310A            279             acall lcd_send_byte
+015F 22              280             ret
+                     281     
+                     282     ; copies data from code memory pointed by dptr to RAM pointed by r0
+                     283     ; stops at null terminator
+0160                 284     lcd_copy_buffer:
+0160                 285             lcd_copy_loop:
+0160 E4              286                     clr a
+0161 93              287                     movc a, @a+dptr
+0162 6005            288                     jz lcd_copy_stop
+0164 F6              289                     mov @r0, a
+0165 08              290                     inc r0
+0166 A3              291                     inc dptr
+0167 80F7            292                     sjmp lcd_copy_loop
+0169                 293             lcd_copy_stop:
+0169 22              294             ret
+                     295     
+                     296     ; prints data pointed by r0 on LCD
+                     297     ; stops at null terminator
+016A                 298     lcd_send_chars_ram:
+016A D292            299             setb LCD_RS
+016C                 300             lcd_send_chars_ram_loop:
+016C E6              301                     mov a, @r0
+016D 6005            302                     jz lcd_send_ram_stop
+016F 310A            303                     acall lcd_send_byte
+0171 08              304                     inc r0
+0172 80F8            305                     sjmp lcd_send_chars_ram_loop
+0174                 306             lcd_send_ram_stop:
+0174 22              307             ret
+                     308     
+                     309     ; raw sensor data from r0 and r1 is converted to absolute value
+                     310     ; of temperature (integer part only) stored in a
+                     311     ; if temperature is negative, PSW^1 is set
+0175                 312     convert_int_temp:
+0175 EA              313             mov a, r2
+0176 5480            314             anl a, #080h
+0178 C2D1            315             clr PSW^1
+017A 7002            316             jnz conv_int_neg_temp
+017C 800C            317             sjmp conv_int_pos_temp
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     6
 
-0174                 321     load_int_disp_buffer:
-0174 20D102          322             jb PSW^1, disp_minus
-0177 8006            323             sjmp skip
-0179                 324             disp_minus:
-0179 FB              325             mov r3, a
-017A 742D            326             mov a, #'-'
-017C F6              327             mov @r0, a
-017D 08              328             inc r0
-017E EB              329             mov a, r3
-017F                 330             skip:
-017F F6              331             mov @r0, a
-0180 08              332             inc r0
-0181 A6F0            333             mov @r0, b
-0183 08              334             inc r0
-0184 22              335             ret
-                     336     
-                     337     ; stores fractional part in display buffer
-0185                 338     load_frac_disp_buffer:
-0185 762E            339             mov @r0, #'.'
-0187 08              340             inc r0
-0188 F6              341             mov @r0, a
-0189 08              342             inc r0
-018A A6F0            343             mov @r0, b
-018C 08              344             inc r0
-018D 22              345             ret
-                     346     
-                     347     ; Debounces buttons and sets a to 1 if KEY_DEC is pressed
-                     348     ;                                 2 if KEY_INC is pressed
-                     349     ;                                 3 if both keys are pressed
-018E                 350     get_keys:
-018E E4              351             clr a
-018F 309002          352             jnb KEY_DEC, get_key_inc
-0192 4401            353             orl a, #1
-0194                 354             get_key_inc:
-0194 309102          355             jnb KEY_INC, get_key_end
-0197 4402            356             orl a, #2
-0199                 357             get_key_end:
-                     358             ; wait for buttons to stabilize
-0199 7B14            359             mov r3, #20
-019B                 360             get_key_delay:
-019B 114D            361                     acall delay_1ms
-019D DBFC            362             djnz r3, get_key_delay
-019F 209002          363             jb KEY_DEC, get_key_inc2
-01A2 54FE            364             anl a, #0FEh
-01A4                 365             get_key_inc2:
-01A4 209102          366             jb KEY_INC, get_key_end2
-01A7 54FD            367             anl a, #0FDh
-01A9                 368             get_key_end2:
-01A9 22              369             ret
-                     370     end
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     7
+017E                 318             conv_int_neg_temp:
+017E D2D1            319             setb PSW^1 ; used to display '-'
+0180 E9              320             mov a, r1
+0181 F4              321             cpl a
+0182 C3              322             clr c
+0183 04              323             inc a
+0184 F9              324             mov r1, a
+0185 EA              325             mov a, r2
+0186 F4              326             cpl a
+0187 3400            327             addc a, #0
+0189 FA              328             mov r2, a
+018A                 329             conv_int_pos_temp:
+018A EA              330             mov a, r2
+018B 7B04            331             mov r3, #4
+018D                 332             convert_int_temp_loop:
+018D C3              333                     clr c
+018E 33              334                     rlc a
+018F DBFC            335                     djnz r3, convert_int_temp_loop
+0191 F5F0            336             mov b, a
+0193 E9              337             mov a, r1
+0194 7B04            338             mov r3, #4
+0196                 339             convert_int_temp_loop2:
+0196 C3              340                     clr c
+0197 13              341                     rrc a
+0198 DBFC            342                     djnz r3, convert_int_temp_loop2
+019A 45F0            343             orl a, b
+019C 22              344             ret
+                     345     
+                     346     ; raw sensor data from r0 is converted to fractional part of temperature
+                     347     ; with two decimal digits stored in a
+019D                 348     convert_frac_temp:
+019D E9              349             mov a, r1
+019E 540F            350             anl a, #0Fh
+01A0 75F006          351             mov b, #6
+01A3 A4              352             mul ab
+01A4 22              353             ret
+                     354     
+                     355     ; values in a and b are converted to ascii by adding '0'
+01A5                 356     to_ascii:
+01A5 75F00A          357             mov b, #10
+01A8 84              358             div ab
+01A9 2430            359             add a, #'0'
+01AB FF              360             mov r7, a
+01AC E5F0            361             mov a, b
+01AE 2430            362             add a, #'0'
+01B0 F5F0            363             mov b, a
+01B2 EF              364             mov a, r7
+01B3 22              365             ret
+                     366     
+                     367     ; stores integer temperature part in display buffer
+01B4                 368     load_int_disp_buffer:
+01B4 20D102          369             jb PSW^1, disp_minus
+01B7 8006            370             sjmp skip
+01B9                 371             disp_minus:
+01B9 FB              372             mov r3, a
+01BA 742D            373             mov a, #'-'
+01BC F6              374             mov @r0, a
+01BD 08              375             inc r0
+01BE EB              376             mov a, r3
+01BF                 377             skip:
+01BF F6              378             mov @r0, a
+01C0 08              379             inc r0
+01C1 A6F0            380             mov @r0, b
+01C3 08              381             inc r0
+01C4 22              382             ret
+                     383     
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     7
+
+                     384     ; stores fractional part in display buffer
+01C5                 385     load_frac_disp_buffer:
+01C5 762E            386             mov @r0, #'.'
+01C7 08              387             inc r0
+01C8 F6              388             mov @r0, a
+01C9 08              389             inc r0
+01CA A6F0            390             mov @r0, b
+01CC 08              391             inc r0
+01CD 22              392             ret
+                     393     
+                     394     ; Debounces buttons and sets a to 1 if KEY_DEC is pressed
+                     395     ;                                 2 if KEY_INC is pressed
+                     396     ;                                 3 if both keys are pressed
+01CE                 397     get_keys:
+01CE E4              398             clr a
+01CF 309002          399             jnb KEY_DEC, get_key_inc
+01D2 4401            400             orl a, #1
+01D4                 401             get_key_inc:
+01D4 309102          402             jnb KEY_INC, get_key_end
+01D7 4402            403             orl a, #2
+01D9                 404             get_key_end:
+                     405             ; wait for buttons to stabilize
+01D9 7B14            406             mov r3, #20
+01DB                 407             get_key_delay:
+01DB 118D            408                     acall delay_1ms
+01DD DBFC            409             djnz r3, get_key_delay
+01DF 209002          410             jb KEY_DEC, get_key_inc2
+01E2 54FE            411             anl a, #0FEh
+01E4                 412             get_key_inc2:
+01E4 209102          413             jb KEY_INC, get_key_end2
+01E7 54FD            414             anl a, #0FDh
+01E9                 415             get_key_end2:
+01E9 22              416             ret
+                     417     
+                     418     ; set - current
+01EA                 419     compare_temp:
+                     420             ; substract lsb
+01EA 7830            421             mov r0, #SENSOR_DATA_BUFFER
+01EC E6              422             mov a, @r0
+01ED F5F0            423             mov b, a
+01EF 7832            424             mov r0, #SET_TEMP_BUFFER
+01F1 E6              425             mov a, @r0
+01F2 C3              426             clr c
+01F3 95F0            427             subb a, b
+01F5 FB              428             mov r3, a
+01F6 F5A0            429             mov P2, a
+                     430             
+                     431             ; substract msb
+01F8 7831            432             mov r0, #SENSOR_DATA_BUFFER+1
+01FA E6              433             mov a, @r0
+01FB F5F0            434             mov b, a
+01FD 7833            435             mov r0, #SET_TEMP_BUFFER+1
+01FF E6              436             mov a, @r0
+0200 95F0            437             subb a, b
+0202 FC              438             mov r4, a
+0203 22              439             ret
+                     440     end
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     8
 
 SYMBOL TABLE LISTING
 ------ ----- -------
@@ -398,47 +473,49 @@ SYMBOL TABLE LISTING
 N A M E                  T Y P E  V A L U E   ATTRIBUTES
 
 B . . . . . . . . . . .  D ADDR   00F0H   A   
-CONVERT_FRAC_TEMP . . .  C ADDR   015DH   A   
-CONVERT_INT_TEMP. . . .  C ADDR   0135H   A   
-CONVERT_INT_TEMP_LOOP .  C ADDR   014DH   A   
-CONVERT_INT_TEMP_LOOP2.  C ADDR   0156H   A   
-CONV_INT_NEG_TEMP . . .  C ADDR   013EH   A   
-CONV_INT_POS_TEMP . . .  C ADDR   014AH   A   
-DELAY . . . . . . . . .  C ADDR   0047H   A   
-DELAY_1MS . . . . . . .  C ADDR   004DH   A   
-DISP_BUFFER . . . . . .  N NUMB   0030H   A   
-DISP_MINUS. . . . . . .  C ADDR   0179H   A   
-GET_KEYS. . . . . . . .  C ADDR   018EH   A   
-GET_KEY_DELAY . . . . .  C ADDR   019BH   A   
-GET_KEY_END . . . . . .  C ADDR   0199H   A   
-GET_KEY_END2. . . . . .  C ADDR   01A9H   A   
-GET_KEY_INC . . . . . .  C ADDR   0194H   A   
-GET_KEY_INC2. . . . . .  C ADDR   01A4H   A   
-INIT_1W . . . . . . . .  C ADDR   0060H   A   
-INIT_END. . . . . . . .  C ADDR   0081H   A   
-INIT_ERROR. . . . . . .  C ADDR   0079H   A   
+COMPARE_TEMP. . . . . .  C ADDR   01EAH   A   
+CONVERT_FRAC_TEMP . . .  C ADDR   019DH   A   
+CONVERT_INT_TEMP. . . .  C ADDR   0175H   A   
+CONVERT_INT_TEMP_LOOP .  C ADDR   018DH   A   
+CONVERT_INT_TEMP_LOOP2.  C ADDR   0196H   A   
+CONV_INT_NEG_TEMP . . .  C ADDR   017EH   A   
+CONV_INT_POS_TEMP . . .  C ADDR   018AH   A   
+DELAY . . . . . . . . .  C ADDR   0087H   A   
+DELAY_1MS . . . . . . .  C ADDR   008DH   A   
+DISP_BUFFER_L1. . . . .  N NUMB   0034H   A   
+DISP_BUFFER_L2. . . . .  N NUMB   0045H   A   
+DISP_MINUS. . . . . . .  C ADDR   01B9H   A   
+GET_KEYS. . . . . . . .  C ADDR   01CEH   A   
+GET_KEY_DELAY . . . . .  C ADDR   01DBH   A   
+GET_KEY_END . . . . . .  C ADDR   01D9H   A   
+GET_KEY_END2. . . . . .  C ADDR   01E9H   A   
+GET_KEY_INC . . . . . .  C ADDR   01D4H   A   
+GET_KEY_INC2. . . . . .  C ADDR   01E4H   A   
+INIT_1W . . . . . . . .  C ADDR   00A0H   A   
+INIT_END. . . . . . . .  C ADDR   00C1H   A   
+INIT_ERROR. . . . . . .  C ADDR   00B9H   A   
 INIT_TH0. . . . . . . .  N NUMB   00FCH   A   
 INIT_TL0. . . . . . . .  N NUMB   0017H   A   
 KEY_DEC . . . . . . . .  B ADDR   0090H.0 A   
 KEY_INC . . . . . . . .  B ADDR   0090H.1 A   
-LCD_CMD_WAIT. . . . . .  C ADDR   00E3H   A   
-LCD_CMD_WAIT2 . . . . .  C ADDR   0104H   A   
-LCD_COPY_BUFFER . . . .  C ADDR   0120H   A   
-LCD_COPY_LOOP . . . . .  C ADDR   0120H   A   
-LCD_COPY_STOP . . . . .  C ADDR   0129H   A   
+LCD_CMD_WAIT. . . . . .  C ADDR   0123H   A   
+LCD_CMD_WAIT2 . . . . .  C ADDR   0144H   A   
+LCD_COPY_BUFFER . . . .  C ADDR   0160H   A   
+LCD_COPY_LOOP . . . . .  C ADDR   0160H   A   
+LCD_COPY_STOP . . . . .  C ADDR   0169H   A   
 LCD_E . . . . . . . . .  B ADDR   0090H.3 A   
-LCD_INIT. . . . . . . .  C ADDR   0109H   A   
+LCD_INIT. . . . . . . .  C ADDR   0149H   A   
 LCD_PORT. . . . . . . .  D ADDR   0090H   A   
 LCD_RS. . . . . . . . .  B ADDR   0090H.2 A   
-LCD_SEND_BYTE . . . . .  C ADDR   00CAH   A   
-LCD_SEND_CHARS_RAM. . .  C ADDR   012AH   A   
-LCD_SEND_CHARS_RAM_LOOP  C ADDR   012CH   A   
-LCD_SEND_RAM_STOP . . .  C ADDR   0134H   A   
-LCD_SHIFT . . . . . . .  C ADDR   00ECH   A   
-LOAD_FRAC_DISP_BUFFER .  C ADDR   0185H   A   
-LOAD_INT_DISP_BUFFER. .  C ADDR   0174H   A   
-MAIN. . . . . . . . . .  C ADDR   0007H   A   
-MAIN_LOOP . . . . . . .  C ADDR   0022H   A   
+LCD_SEND_BYTE . . . . .  C ADDR   010AH   A   
+LCD_SEND_CHARS_RAM. . .  C ADDR   016AH   A   
+LCD_SEND_CHARS_RAM_LOOP  C ADDR   016CH   A   
+LCD_SEND_RAM_STOP . . .  C ADDR   0174H   A   
+LCD_SHIFT . . . . . . .  C ADDR   012CH   A   
+LOAD_FRAC_DISP_BUFFER .  C ADDR   01C5H   A   
+LOAD_INT_DISP_BUFFER. .  C ADDR   01B4H   A   
+MAIN. . . . . . . . . .  C ADDR   0014H   A   
+MAIN_LOOP . . . . . . .  C ADDR   0033H   A   
 P0. . . . . . . . . . .  D ADDR   0080H   A   
 P1. . . . . . . . . . .  D ADDR   0090H   A   
 P2. . . . . . . . . . .  D ADDR   00A0H   A   
@@ -446,25 +523,27 @@ P3. . . . . . . . . . .  D ADDR   00B0H   A
 PIN_1W. . . . . . . . .  B ADDR   00B0H.3 A   
 PIN_RELAY . . . . . . .  B ADDR   00B0H.7 A   
 PSW . . . . . . . . . .  D ADDR   00D0H   A   
-READ_BYTE_1W. . . . . .  C ADDR   0086H   A   
-READ_END. . . . . . . .  C ADDR   0094H   A   
-READ_SENSOR . . . . . .  C ADDR   00AFH   A   
-SET_TEMP_BUFFER . . . .  N NUMB   0060H   A   
-SIMPLE_DELAY. . . . . .  C ADDR   005DH   A   
-SKIP. . . . . . . . . .  C ADDR   017FH   A   
-START_READ. . . . . . .  C ADDR   0089H   A   
-START_WRITE . . . . . .  C ADDR   009DH   A   
+READ_BYTE_1W. . . . . .  C ADDR   00C6H   A   
+READ_END. . . . . . . .  C ADDR   00D4H   A   
+READ_SENSOR . . . . . .  C ADDR   00EFH   A   
+SENSOR_DATA_BUFFER. . .  N NUMB   0030H   A   
+SET_TEMP_BUFFER . . . .  N NUMB   0032H   A   
+SIMPLE_DELAY. . . . . .  C ADDR   009DH   A   
+SKIP. . . . . . . . . .  C ADDR   01BFH   A   
+START_READ. . . . . . .  C ADDR   00C9H   A   
+START_WRITE . . . . . .  C ADDR   00DDH   A   
+A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 18:33:47 PAGE     9
+
 TEXT1 . . . . . . . . .  C ADDR   0002H   A   
+TEXT2 . . . . . . . . .  C ADDR   000BH   A   
 TF0 . . . . . . . . . .  B ADDR   0088H.5 A   
 TH0 . . . . . . . . . .  D ADDR   008CH   A   
-A51 MACRO ASSEMBLER  MAIN                                                                 05/15/2018 16:14:54 PAGE     8
-
 TL0 . . . . . . . . . .  D ADDR   008AH   A   
 TMOD. . . . . . . . . .  D ADDR   0089H   A   
-TO_ASCII. . . . . . . .  C ADDR   0165H   A   
+TO_ASCII. . . . . . . .  C ADDR   01A5H   A   
 TR0 . . . . . . . . . .  B ADDR   0088H.4 A   
-WAIT. . . . . . . . . .  C ADDR   0055H   A   
-WRITE_BYTE_1W . . . . .  C ADDR   009BH   A   
+WAIT. . . . . . . . . .  C ADDR   0095H   A   
+WRITE_BYTE_1W . . . . .  C ADDR   00DBH   A   
 
 
 REGISTER BANK(S) USED: 0 
