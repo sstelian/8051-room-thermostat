@@ -2,13 +2,13 @@
 LCD_PORT equ P1
 LCD_E equ P1.3
 LCD_RS equ P1.2
-	
+
 ; OneWire pin
 PIN_1W equ  P3.3
 
 ; Heater relay pin
 PIN_RELAY equ P3.7
-	
+
 ; Keyboard pins
 KEY_DEC equ P1.0
 KEY_INC equ P1.1
@@ -16,19 +16,20 @@ KEY_INC equ P1.1
 ; Timer consts for generic 8051 for 1 ms delay
 INIT_TL0 equ 017h
 INIT_TH0 equ 0FCh
-	
+
 ; Display buffer start address
 DISP_BUFFER equ 030h
 
+; Set temperature buffer start address
+SET_TEMP_BUFFER equ 060h
+
 org 0000h
-	
+
 sjmp main
 
 text1:
 db "T = ", 0
-text2:
-db ".", 0
-	
+
 main:
 ; I/O pins initialization
 mov LCD_PORT, #0
@@ -50,34 +51,31 @@ acall lcd_init
 
 main_loop:
 	acall read_sensor
-	acall convert_int_temp
-	acall to_ascii
-	mov r2, 00h
-	
-	acall load_int_disp_buffer
-	
-	mov r0, #DISP_BUFFER
+
 	mov a, #01h ; clear LCD
 	clr LCD_RS
 	acall lcd_send_byte
-	mov dptr, #text1
-	setb LCD_RS
-	acall lcd_send_chars ; display constant text
-	acall lcd_send_chars_ram ; display dynamic text
-	mov dptr, #text2
-	acall lcd_send_chars ; display constant text
-	mov 00h, r2
-	acall convert_frac_temp
-	acall to_ascii
-
-	acall load_frac_disp_buffer
 
 	mov r0, #DISP_BUFFER
-	acall lcd_send_chars_ram ; display dynamic text
-	mov r0, #255
+	mov dptr, #text1
+	setb LCD_RS
+	acall lcd_copy_buffer
+
+	acall convert_int_temp
+	acall to_ascii
+	acall load_int_disp_buffer
+
+	acall convert_frac_temp
+	acall to_ascii
+	acall load_frac_disp_buffer
+	mov @r0, #0
+
+	mov r0, #DISP_BUFFER
+	acall lcd_send_chars_ram ; display text from buffer
+	mov r3, #255
 	delay:
 		acall delay_1ms
-		djnz r0, delay
+		djnz r3, delay
 	sjmp main_loop
 
 delay_1ms:
@@ -173,11 +171,11 @@ read_sensor:
 	mov a, #0BEh ; read Scratchpad
 	acall write_byte_1W
 	acall read_byte_1W
-	mov r0, a
-	acall read_byte_1W
 	mov r1, a
+	acall read_byte_1W
+	mov r2, a
 	ret
-	
+
 lcd_send_byte:
 	anl LCD_PORT, #0Fh
 	mov r7, a
@@ -188,16 +186,16 @@ lcd_send_byte:
 	mov LCD_PORT, a
 	mov a, r7
 	setb LCD_E
-	
+
 	acall delay_1ms
 
 	clr LCD_E
-	
+
 	mov r7, #40
 	lcd_cmd_wait:
 		acall delay_1ms
 		djnz r7, lcd_cmd_wait
-	
+
 	anl LCD_PORT, #0Fh
 	mov r7, #4
 	lcd_shift:
@@ -210,16 +208,16 @@ lcd_send_byte:
 	orl a, b
 	mov LCD_PORT, a
 	setb LCD_E
-		
-	acall delay_1ms	
-		
+
+	acall delay_1ms
+
 	clr LCD_E
 	mov r7, #40
 	lcd_cmd_wait2:
 		acall delay_1ms
 		djnz r7, lcd_cmd_wait2
 	ret
-		
+
 lcd_init:
 	clr LCD_RS
 	mov a, #02h ; 4 bit mode
@@ -233,71 +231,81 @@ lcd_init:
 	mov a, #080h ; move cursor to first position
 	acall lcd_send_byte
 	ret
-	
-lcd_send_chars:
-	setb LCD_RS
-	lcd_send_chars_loop:
+
+; copies data from code memory pointed by dptr to RAM pointed by r0
+; stops at null terminator
+lcd_copy_buffer:
+	lcd_copy_loop:
 		clr a
 		movc a, @a+dptr
-		jz lcd_send_stop
-		acall lcd_send_byte	
+		jz lcd_copy_stop
+		mov @r0, a
+		inc r0
 		inc dptr
-		sjmp lcd_send_chars_loop
-	lcd_send_stop:
+		sjmp lcd_copy_loop
+	lcd_copy_stop:
 	ret
-	
+
+; prints data pointed by r0 on LCD
+; stops at null terminator
 lcd_send_chars_ram:
 	setb LCD_RS
 	lcd_send_chars_ram_loop:
 		mov a, @r0
 		jz lcd_send_ram_stop
-		acall lcd_send_byte	
+		acall lcd_send_byte
 		inc r0
 		sjmp lcd_send_chars_ram_loop
 	lcd_send_ram_stop:
 	ret
-	
+
+; raw sensor data from r0 and r1 is converted to absolute value
+; of temperature (integer part only) stored in a
+; if temperature is negative, PSW^1 is set
 convert_int_temp:
-	mov a, r1
+	mov a, r2
 	anl a, #080h
 	clr PSW^1
 	jnz conv_int_neg_temp
 	sjmp conv_int_pos_temp
 	conv_int_neg_temp:
 	setb PSW^1 ; used to display '-'
-	mov a, r0
+	mov a, r1
 	cpl a
 	clr c
 	inc a
-	mov r0, a
-	mov a, r1
+	mov r1, a
+	mov a, r2
 	cpl a
 	addc a, #0
-	mov r1, a
+	mov r2, a
 	conv_int_pos_temp:
-	mov a, r1
-	mov r2, #4
+	mov a, r2
+	mov r3, #4
 	convert_int_temp_loop:
 		clr c
 		rlc a
-		djnz r2, convert_int_temp_loop
+		djnz r3, convert_int_temp_loop
 	mov b, a
-	mov a, r0
-	mov r2, #4
+	mov a, r1
+	mov r3, #4
 	convert_int_temp_loop2:
 		clr c
 		rrc a
-		djnz r2, convert_int_temp_loop2
+		djnz r3, convert_int_temp_loop2
 	orl a, b
 	ret
-	
+
+; raw sensor data from r0 is converted to fractional part of temperature
+; with two decimal digits stored in a
 convert_frac_temp:
-	mov a, r0
+	mov a, r1
 	anl a, #0Fh
 	mov b, #6
 	mul ab
 	ret
-	
+
+; values in a and b are converted to ascii by adding '0'
 to_ascii:
 	mov b, #10
 	div ab
@@ -308,9 +316,9 @@ to_ascii:
 	mov b, a
 	mov a, r7
 	ret
-	
+
+; stores integer temperature part in display buffer
 load_int_disp_buffer:
-	mov r0, #DISP_BUFFER
 	jb PSW^1, disp_minus
 	sjmp skip
 	disp_minus:
@@ -324,16 +332,16 @@ load_int_disp_buffer:
 	inc r0
 	mov @r0, b
 	inc r0
-	mov @r0, #0
 	ret
-	
+
+; stores fractional part in display buffer
 load_frac_disp_buffer:
-	mov r0, #DISP_BUFFER
+	mov @r0, #'.'
+	inc r0
 	mov @r0, a
 	inc r0
 	mov @r0, b
 	inc r0
-	mov @r0, #0
 	ret
 
 ; Debounces buttons and sets a to 1 if KEY_DEC is pressed
@@ -348,10 +356,10 @@ get_keys:
 	orl a, #2
 	get_key_end:
 	; wait for buttons to stabilize
-	mov r0, #20
+	mov r3, #20
 	get_key_delay:
 		acall delay_1ms
-	djnz r0, get_key_delay
+	djnz r3, get_key_delay
 	jb KEY_DEC, get_key_inc2
 	anl a, #0FEh
 	get_key_inc2:

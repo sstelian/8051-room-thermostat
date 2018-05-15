@@ -3,6 +3,7 @@
  <FRAME activewindow="0">
   <PLACEMENT>2c00000002000000030000000083ffff0083fffffcffffff03000000ee000000d800000056050000ad030000</PLACEMENT>
   <WINDOW type="default" module="ISIS"/>
+  <WINDOW type="default" module="DXP"/>
  </FRAME>
  <MODULE name="VSMDEBUG">
   <PWI>
