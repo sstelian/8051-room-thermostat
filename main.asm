@@ -1,3 +1,10 @@
+;
+; Room thermostat based on the 8051 microcontroller.
+; Temperature sensor : DS18B20
+; Developed by Stelian Saracut
+; 2018
+;
+
 ; LCD pins
 LCD_PORT equ P1
 LCD_E equ P1.3
@@ -37,6 +44,7 @@ text2:
 db "Set T = ", 0
 
 main:
+
 ; I/O pins initialization
 mov LCD_PORT, #0
 clr LCD_E
@@ -45,11 +53,12 @@ clr PIN_RELAY
 setb KEY_DEC
 setb KEY_INC
 
-; Set temperature buffer initialization
+; Set temperature buffer initialization (21 degrees)
+; Set temperature is represented as raw sensor data
 mov r0, #SET_TEMP_BUFFER
-mov @r0, #10100010b
+mov @r0, #01010000b
 inc r0
-mov @r0, #0
+mov @r0, #00000001b
 
 ; Timer initialization
 ; Timer0 used for delay
@@ -62,6 +71,7 @@ acall lcd_init
 
 main_loop:
 	acall read_sensor
+	; copy sensor data to buffer
 	mov r0, #SENSOR_DATA_BUFFER
 	mov a, r1
 	mov @r0, a
@@ -69,15 +79,18 @@ main_loop:
 	inc r0
 	mov @r0, a
 
-	mov a, #01h ; clear LCD
+	 ; clear LCD
+	mov a, #01h
 	clr LCD_RS
 	acall lcd_send_byte
 
+	; Copy constant text for line 1
 	mov r0, #DISP_BUFFER_L1
 	mov dptr, #text1
 	setb LCD_RS
 	acall lcd_copy_buffer
 
+	; Convert sensor data to ASCII
 	acall convert_int_temp
 	acall to_ascii
 	acall load_int_disp_buffer
@@ -87,9 +100,11 @@ main_loop:
 	acall load_frac_disp_buffer
 	mov @r0, #0
 
+	; Display line 1
 	mov r0, #DISP_BUFFER_L1
 	acall lcd_send_chars_ram ; display current temperature
 
+	; Load set temperature to registers for conversion
 	mov r0, #SET_TEMP_BUFFER
 	mov a, @r0
 	mov r1, a
@@ -97,14 +112,17 @@ main_loop:
 	mov a, @r0
 	mov r2, a
 
-	mov a, #0C0h ; move to line 2
+	; Move to line 2
+	mov a, #0C0h
 	clr LCD_RS
 	acall lcd_send_byte
 
+	; Copy constant text for line 1
 	mov r0, #DISP_BUFFER_L2
 	mov dptr, #text2
 	acall lcd_copy_buffer
 
+	; Convert set temperature to ASCII
 	acall convert_int_temp
 	acall to_ascii
 	acall load_int_disp_buffer
@@ -112,18 +130,28 @@ main_loop:
 	acall convert_frac_temp
 	acall to_ascii
 	acall load_frac_disp_buffer
-
 	mov @r0, #0
-	mov r0, #DISP_BUFFER_L2
-	acall lcd_send_chars_ram ; display set temperature
 
-	acall compare_temp
+	; Display line 2
+	mov r0, #DISP_BUFFER_L2
+	acall lcd_send_chars_ram
+
+	; Read keyboard
+	acall get_keys
 	
-	mov r3, #255
+	; Compare set and current temperature and enable relay if
+	; current temperature is lower
+	acall compare_temp
+
+	; Wait 100 ms
+	mov r3, #100
 	delay:
 		acall delay_1ms
 		djnz r3, delay
 	sjmp main_loop
+; end of main loop
+
+
 
 delay_1ms:
 	; load initial timer values
@@ -144,7 +172,6 @@ simple_delay:
 	djnz r7, simple_delay
 	ret
 
-; TODO : hardware and software for strong 1W pullup
 init_1W:
 	setb PIN_1W
 	mov r7, #48
@@ -172,7 +199,7 @@ init_1W:
 	acall simple_delay
 	ret
 
-; result in accumulator
+; Result in accumulator
 read_byte_1W:
 	mov r6, #8
 	clr a
@@ -189,7 +216,7 @@ read_byte_1W:
 		djnz r6, start_read
 	ret
 
-; write byte from accumulator
+; Write byte from accumulator
 write_byte_1W:
 	mov r6, #8
 	start_write:
@@ -204,7 +231,7 @@ write_byte_1W:
 	acall simple_delay
 	ret
 
-; read temperature from DS18B20 sensor
+; Read temperature from DS18B20 sensor
 read_sensor:
 	acall init_1W
 	; TODO : handle error
@@ -238,7 +265,7 @@ lcd_send_byte:
 
 	clr LCD_E
 
-	mov r7, #40
+	mov r7, #4
 	lcd_cmd_wait:
 		acall delay_1ms
 		djnz r7, lcd_cmd_wait
@@ -259,7 +286,7 @@ lcd_send_byte:
 	acall delay_1ms
 
 	clr LCD_E
-	mov r7, #40
+	mov r7, #4
 	lcd_cmd_wait2:
 		acall delay_1ms
 		djnz r7, lcd_cmd_wait2
@@ -279,8 +306,8 @@ lcd_init:
 	acall lcd_send_byte
 	ret
 
-; copies data from code memory pointed by dptr to RAM pointed by r0
-; stops at null terminator
+; Copies data from code memory pointed by dptr to RAM pointed by r0
+; Stops at null terminator
 lcd_copy_buffer:
 	lcd_copy_loop:
 		clr a
@@ -293,8 +320,8 @@ lcd_copy_buffer:
 	lcd_copy_stop:
 	ret
 
-; prints data pointed by r0 on LCD
-; stops at null terminator
+; Prints data pointed by r0 on LCD
+; Stops at null terminator
 lcd_send_chars_ram:
 	setb LCD_RS
 	lcd_send_chars_ram_loop:
@@ -306,7 +333,7 @@ lcd_send_chars_ram:
 	lcd_send_ram_stop:
 	ret
 
-; raw sensor data from r0 and r1 is converted to absolute value
+; Raw sensor data from r0 and r1 is converted to absolute value
 ; of temperature (integer part only) stored in a
 ; if temperature is negative, PSW^1 is set
 convert_int_temp:
@@ -343,7 +370,7 @@ convert_int_temp:
 	orl a, b
 	ret
 
-; raw sensor data from r0 is converted to fractional part of temperature
+; Raw sensor data from r0 is converted to fractional part of temperature
 ; with two decimal digits stored in a
 convert_frac_temp:
 	mov a, r1
@@ -352,7 +379,7 @@ convert_frac_temp:
 	mul ab
 	ret
 
-; values in a and b are converted to ascii by adding '0'
+; Values in a and b are converted to ascii by adding '0'
 to_ascii:
 	mov b, #10
 	div ab
@@ -364,7 +391,7 @@ to_ascii:
 	mov a, r7
 	ret
 
-; stores integer temperature part in display buffer
+; Stores integer temperature part in display buffer
 load_int_disp_buffer:
 	jb PSW^1, disp_minus
 	sjmp skip
@@ -381,7 +408,7 @@ load_int_disp_buffer:
 	inc r0
 	ret
 
-; stores fractional part in display buffer
+; Stores fractional part in display buffer
 load_frac_disp_buffer:
 	mov @r0, #'.'
 	inc r0
@@ -395,27 +422,48 @@ load_frac_disp_buffer:
 ;                                 2 if KEY_INC is pressed
 ;                                 3 if both keys are pressed
 get_keys:
-	clr a
-	jnb KEY_DEC, get_key_inc
-	orl a, #1
-	get_key_inc:
-	jnb KEY_INC, get_key_end
-	orl a, #2
-	get_key_end:
-	; wait for buttons to stabilize
-	mov r3, #20
-	get_key_delay:
+	setb KEY_INC
+	setb KEY_DEC
+	jb KEY_INC, get_key_dec
+	
+	; Increase temperature key pressed
+	mov r3, #10
+	delay_inc:
 		acall delay_1ms
-	djnz r3, get_key_delay
-	jb KEY_DEC, get_key_inc2
-	anl a, #0FEh
-	get_key_inc2:
-	jb KEY_INC, get_key_end2
-	anl a, #0FDh
-	get_key_end2:
+		djnz r3, delay_inc
+	jb KEY_INC, get_key_end
+	mov r0, #SET_TEMP_BUFFER
+	mov a, @r0
+	clr c
+	add a, #8
+	mov @r0, a
+	inc r0
+	mov a, @r0
+	addc a, #0
+	mov @r0, a
+	ret
+	get_key_dec:
+	jb KEY_DEC, get_key_end
+	
+	; Decrease temperature key pressed
+	mov r3, #10
+	delay_dec:
+		acall delay_1ms
+		djnz r3, delay_dec
+	jb KEY_DEC, get_key_end
+	mov r0, #SET_TEMP_BUFFER
+	mov a, @r0
+	clr c
+	subb a, #8
+	mov @r0, a
+	inc r0
+	mov a, @r0
+	subb a, #0
+	mov @r0, a
+	get_key_end:
 	ret
 
-; set - current
+; Substract : set - current
 compare_temp:
 	; substract lsb
 	mov r0, #SENSOR_DATA_BUFFER
@@ -425,7 +473,6 @@ compare_temp:
 	mov a, @r0
 	clr c
 	subb a, b
-	mov r3, a
 	
 	; substract msb
 	mov r0, #SENSOR_DATA_BUFFER+1
@@ -434,6 +481,8 @@ compare_temp:
 	mov r0, #SET_TEMP_BUFFER+1
 	mov a, @r0
 	subb a, b
-	mov r4, a
+	cpl c
+	mov PIN_RELAY, c
 	ret
+	
 end
