@@ -1,3 +1,11 @@
+/**
+* Room thermostat based on the 8051 microcontroller.
+* Temperature sensor : DS18B20
+* Developed by Stelian Saracut
+* 2018
+*
+*/
+
 #include <reg51.h>
 #include <stdio.h>
 
@@ -10,14 +18,18 @@ sbit LCD_RS = P1^2;
 unsigned char * singleChar;
 signed int temp;
 char display_buffer[33];
-float ftemp;
+float currentTemp, setTemp;
 
-//sensor 
+//sensor
 unsigned char sensorBuffer[2];
 sbit pin_1W=P3^3;
 
 //relay
 sbit pin_relay = P3^7;
+
+//keyboard
+sbit key_dec = P1^0;
+sbit key_inc = P1^1;
 
 //function headers
 void delay(unsigned int i);
@@ -28,13 +40,20 @@ void read_sensor(void);
 void lcd_cmd(unsigned char cmd);
 void lcd_chars(unsigned char * chars);
 void lcd_init();
+void get_keys();
 
 void main()
 {
+	// I/O pins initialization
 	pin_relay = 0;
-	LCD_PORT = 0;
+	LCD_PORT = 0x0F;
 	LCD_E = 0;
 	LCD_RS = 0;
+	key_dec = 1;
+	key_inc = 1;
+	setTemp = 21.0f;
+	
+	//LCD initialization
 	lcd_init();
 
 	while(1)
@@ -43,13 +62,24 @@ void main()
 		temp = sensorBuffer[0]; //lsb
 		temp &= 0x00FF;
 		temp |= (sensorBuffer[1] << 8);
-		ftemp = temp * 0.0625;
-		sprintf(display_buffer, "T = %.2f", ftemp);
+		//convert raw sensor data to temperature
+		currentTemp = temp * 0.0625;
+		//format line 1
+		sprintf(display_buffer, "T     = %.2f", currentTemp);
 		lcd_cmd(0x01);
 		lcd_cmd(0x80);
+		//display line 1
 		lcd_chars(display_buffer);
-		pin_relay = 1;
-		delay(10000);
+		//move to line 2
+		lcd_cmd(0xC0);
+		sprintf(display_buffer, "Set T = %.2f", setTemp);
+		//display line 2
+		lcd_chars(display_buffer);
+		//enable relay if current temperature is lower
+		pin_relay = (setTemp > currentTemp);
+		//read keyboard
+		get_keys();
+		delay(10);
 	}
 }
 
@@ -121,48 +151,48 @@ void read_sensor(void)
 void lcd_cmd(unsigned char cmd)
 {
 		LCD_RS = 0;
-		LCD_PORT &= 0x0F; 
-		LCD_PORT = (cmd & 0xF0);
-		LCD_E = 1;
-		delay(1000);
-		LCD_E = 0;
-	
-		delay(10000);
-	
 		LCD_PORT &= 0x0F;
-		LCD_PORT = ((cmd << 4) & 0xF0);
+		LCD_PORT |= (cmd & 0xF0);
 		LCD_E = 1;
-		delay(1000);
+		delay(100);
 		LCD_E = 0;
-	
-		delay(10000);
+
+		delay(1000);
+
+		LCD_PORT &= 0x0F;
+		LCD_PORT |= ((cmd << 4) & 0xF0);
+		LCD_E = 1;
+		delay(100);
+		LCD_E = 0;
+
+		delay(1000);
 }
 
 void lcd_chars(unsigned char * chars)
 {
 	LCD_RS = 1;
 	singleChar = chars;
-	
+
 	while(*singleChar != '\0')
 	{
-		LCD_PORT &= 0x0F; 
+		LCD_PORT &= 0x0F;
 		LCD_PORT |= ((*singleChar) & 0xF0);
 		LCD_RS = 1;
 		LCD_E = 1;
-		delay(1000);
+		delay(100);
 		LCD_E = 0;
-		
-		delay(10000);
-		
+
+		delay(1000);
+
 		LCD_PORT &= 0x0F;
 		LCD_PORT |= (((*singleChar) << 4) & 0xF0);
 		LCD_RS = 1;
 		LCD_E = 1;
-		delay(1000);
+		delay(100);
 		LCD_E = 0;
-			
-		delay(10000);
-			
+
+		delay(1000);
+
 		singleChar++;
 	}
 }
@@ -174,4 +204,27 @@ void lcd_init()
 	lcd_cmd(0x0E); //cursor on
 	lcd_cmd(0x01); //clear
 	lcd_cmd(0x80); //move cursor to first position
+}
+
+//reads and debounces keys and modifies set temperature
+void get_keys()
+{
+	key_inc = 1;
+	key_dec = 1;
+	
+	if(!key_inc)
+	{
+			delay(1000);
+			if (!key_inc)
+				setTemp += 0.5f;
+			return;
+	}
+	
+	if(!key_dec)
+	{
+			delay(1000);
+			if (!key_dec)
+				setTemp -= 0.5f;
+			return;
+	}
 }
