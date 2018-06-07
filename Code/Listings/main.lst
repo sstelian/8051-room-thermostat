@@ -1,0 +1,265 @@
+C51 COMPILER V9.57.0.0   MAIN                                                              05/19/2018 13:15:19 PAGE 1   
+
+
+C51 COMPILER V9.57.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          /**
+   2          * Room thermostat based on the 8051 microcontroller.
+   3          * Temperature sensor : DS18B20
+   4          * Developed by Stelian Saracut
+   5          * 2018
+   6          *
+   7          */
+   8          
+   9          #include <reg51.h>
+  10          #include <stdio.h>
+  11          
+  12          //display pins
+  13          #define LCD_PORT P1
+  14          sbit LCD_E = P1^3;
+  15          sbit LCD_RS = P1^2;
+  16          
+  17          //display variables
+  18          unsigned char * singleChar;
+  19          signed int temp;
+  20          char display_buffer[33];
+  21          float currentTemp, setTemp;
+  22          
+  23          //sensor
+  24          unsigned char sensorBuffer[2];
+  25          sbit pin_1W=P3^3;
+  26          
+  27          //relay
+  28          sbit pin_relay = P3^7;
+  29          
+  30          //keyboard
+  31          sbit key_dec = P1^0;
+  32          sbit key_inc = P1^1;
+  33          
+  34          //function headers
+  35          void delay(unsigned int i);
+  36          void init_1W(void);
+  37          unsigned char readByte_1W(void);
+  38          void writeByte_1W(unsigned char dat);
+  39          void read_sensor(void);
+  40          void lcd_cmd(unsigned char cmd);
+  41          void lcd_chars(unsigned char * chars);
+  42          void lcd_init();
+  43          void get_keys();
+  44          
+  45          void main()
+  46          {
+  47   1        // I/O pins initialization
+  48   1        pin_relay = 0;
+  49   1        LCD_PORT = 0x0F;
+  50   1        LCD_E = 0;
+  51   1        LCD_RS = 0;
+  52   1        key_dec = 1;
+  53   1        key_inc = 1;
+  54   1        setTemp = 21.0f;
+C51 COMPILER V9.57.0.0   MAIN                                                              05/19/2018 13:15:19 PAGE 2   
+
+  55   1        
+  56   1        //LCD initialization
+  57   1        lcd_init();
+  58   1      
+  59   1        while(1)
+  60   1        {
+  61   2          read_sensor();
+  62   2          temp = sensorBuffer[0]; //lsb
+  63   2          temp &= 0x00FF;
+  64   2          temp |= (sensorBuffer[1] << 8);
+  65   2          //convert raw sensor data to temperature
+  66   2          currentTemp = temp * 0.0625;
+  67   2          //format line 1
+  68   2          sprintf(display_buffer, "T     = %.2f", currentTemp);
+  69   2          lcd_cmd(0x01);
+  70   2          lcd_cmd(0x80);
+  71   2          //display line 1
+  72   2          lcd_chars(display_buffer);
+  73   2          //move to line 2
+  74   2          lcd_cmd(0xC0);
+  75   2          sprintf(display_buffer, "Set T = %.2f", setTemp);
+  76   2          //display line 2
+  77   2          lcd_chars(display_buffer);
+  78   2          //enable relay if current temperature is lower
+  79   2          pin_relay = (setTemp > currentTemp);
+  80   2          //read keyboard
+  81   2          get_keys();
+  82   2          delay(10000);
+  83   2          delay(10000);
+  84   2          delay(10000);
+  85   2          delay(10000);
+  86   2        }
+  87   1      }
+  88          
+  89          //function implementations
+  90          void delay(unsigned int i)
+  91          {
+  92   1          while(i--);
+  93   1      }
+  94          
+  95          //OneWire basic functions
+  96          void init_1W(void)
+  97          {
+  98   1          unsigned char x=0;
+  99   1          pin_1W = 1;
+ 100   1          delay(8);
+ 101   1          pin_1W = 0;
+ 102   1          delay(80);
+ 103   1          pin_1W = 1;
+ 104   1          delay(14);
+ 105   1          x=pin_1W;
+ 106   1          delay(20);
+ 107   1      }
+ 108          
+ 109          unsigned char readByte_1W(void)
+ 110          {
+ 111   1          unsigned char i=0;
+ 112   1          unsigned char dat = 0;
+ 113   1          for (i=8;i>0;i--)
+ 114   1          {
+ 115   2            pin_1W = 0;
+ 116   2            dat>>=1;
+C51 COMPILER V9.57.0.0   MAIN                                                              05/19/2018 13:15:19 PAGE 3   
+
+ 117   2            pin_1W = 1;
+ 118   2            if(pin_1W)
+ 119   2            dat|=0x80;
+ 120   2            delay(4);
+ 121   2          }
+ 122   1          return(dat);
+ 123   1      }
+ 124          
+ 125          void writeByte_1W(unsigned char dat)
+ 126          {
+ 127   1          unsigned char i=0;
+ 128   1          for (i=8; i>0; i--)
+ 129   1          {
+ 130   2            pin_1W = 0;
+ 131   2            pin_1W = dat&0x01;
+ 132   2            delay(5);
+ 133   2            pin_1W = 1;
+ 134   2            dat>>=1;
+ 135   2          }
+ 136   1          delay(4);
+ 137   1      }
+ 138          
+ 139          //temperature read for DS18B20
+ 140          //raw 16 bit value in sensorBuffer
+ 141          void read_sensor(void)
+ 142          {
+ 143   1          init_1W();
+ 144   1          writeByte_1W(0xCC); //skip ROM
+ 145   1          writeByte_1W(0x44); //convert T
+ 146   1          init_1W();
+ 147   1          writeByte_1W(0xCC); //skip ROM
+ 148   1          writeByte_1W(0xBE); //read scratchpad
+ 149   1          sensorBuffer[0]=readByte_1W();
+ 150   1          sensorBuffer[1]=readByte_1W();
+ 151   1      }
+ 152          
+ 153          //LM016L compatible LCD display functions
+ 154          void lcd_cmd(unsigned char cmd)
+ 155          {
+ 156   1          LCD_RS = 0;
+ 157   1          LCD_PORT &= 0x0F;
+ 158   1          LCD_PORT |= (cmd & 0xF0);
+ 159   1          LCD_E = 1;
+ 160   1          delay(100);
+ 161   1          LCD_E = 0;
+ 162   1      
+ 163   1          delay(1000);
+ 164   1      
+ 165   1          LCD_PORT &= 0x0F;
+ 166   1          LCD_PORT |= ((cmd << 4) & 0xF0);
+ 167   1          LCD_E = 1;
+ 168   1          delay(100);
+ 169   1          LCD_E = 0;
+ 170   1      
+ 171   1          delay(1000);
+ 172   1      }
+ 173          
+ 174          void lcd_chars(unsigned char * chars)
+ 175          {
+ 176   1        LCD_RS = 1;
+ 177   1        singleChar = chars;
+ 178   1      
+C51 COMPILER V9.57.0.0   MAIN                                                              05/19/2018 13:15:19 PAGE 4   
+
+ 179   1        while(*singleChar != '\0')
+ 180   1        {
+ 181   2          LCD_PORT &= 0x0F;
+ 182   2          LCD_PORT |= ((*singleChar) & 0xF0);
+ 183   2          LCD_RS = 1;
+ 184   2          LCD_E = 1;
+ 185   2          delay(100);
+ 186   2          LCD_E = 0;
+ 187   2      
+ 188   2          delay(1000);
+ 189   2      
+ 190   2          LCD_PORT &= 0x0F;
+ 191   2          LCD_PORT |= (((*singleChar) << 4) & 0xF0);
+ 192   2          LCD_RS = 1;
+ 193   2          LCD_E = 1;
+ 194   2          delay(100);
+ 195   2          LCD_E = 0;
+ 196   2      
+ 197   2          delay(1000);
+ 198   2      
+ 199   2          singleChar++;
+ 200   2        }
+ 201   1      }
+ 202          
+ 203          void lcd_init()
+ 204          {
+ 205   1        lcd_cmd(0x02); //4 bit mode
+ 206   1        lcd_cmd(0x28); //5x7 chars
+ 207   1        lcd_cmd(0x0E); //cursor on
+ 208   1        lcd_cmd(0x01); //clear
+ 209   1        lcd_cmd(0x80); //move cursor to first position
+ 210   1      }
+ 211          
+ 212          //reads and debounces keys and modifies set temperature
+ 213          void get_keys()
+ 214          {
+ 215   1        key_inc = 1;
+ 216   1        key_dec = 1;
+ 217   1        
+ 218   1        if(!key_inc)
+ 219   1        {
+ 220   2            delay(1000);
+ 221   2            if (!key_inc)
+ 222   2              setTemp += 0.5f;
+ 223   2            return;
+ 224   2        }
+ 225   1        
+ 226   1        if(!key_dec)
+ 227   1        {
+ 228   2            delay(1000);
+ 229   2            if (!key_dec)
+ 230   2              setTemp -= 0.5f;
+ 231   2            return;
+ 232   2        }
+ 233   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    577    ----
+   CONSTANT SIZE    =     26    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.57.0.0   MAIN                                                              05/19/2018 13:15:19 PAGE 5   
+
+   DATA SIZE        =     48    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

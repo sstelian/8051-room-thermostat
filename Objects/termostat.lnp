@@ -1,3 +1,0 @@
-".\Objects\main.obj" 
-TO ".\Objects\termostat" 
-PRINT(".\Listings\termostat.m51")
